@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOYVERES POS – Barcode & Debt Discord Edition (2026)</title>
+    <!-- Tailwind CSS v4 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- HTML2Canvas (ສຳລັບດາວໂຫລດ ແລະ ແຊຣ໌ບິນ) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- HTML5 QR Code Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <!-- Fonts: Phetsarath OT & Noto Sans Lao -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: 'Phetsarath OT';
+            src: url('https://cdn.jsdelivr.net/gh/anonystick/laos-fonts/fonts/PhetsarathOT.ttf') format('truetype');
+        }
+        * {
+            font-family: 'Phetsarath OT', serif !important;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.97);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+        @media print {
+            body * { visibility: hidden; }
+            #receipt-printable-area, #receipt-printable-area * { visibility: visible; }
+            #receipt-printable-area { position: absolute; left: 0; top: 0; width: 58mm; display: block !important; }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 text-slate-900 antialiased min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white">
+
+    <!-- ========================================================================= -->
+    <!-- ⚙️ CONFIG & CODE-BASED DATA ZONE -->
+    <!-- ========================================================================= -->
+    <script>
+        const CODE_SHOP_SETTINGS = {
+            shop_name: 'ຮ້ານຄ້າທົ່ວໄປ',       // <-- ຊື່ຮ້ານ
+            shop_phone: '020 52866557',       // <-- ເບີໂທຮ້ານ
+            footer_note: 'ຂອບໃຈທີ່ໃຊ້ບໍລິການ!',   // <-- ຂໍ້ຄວາມທ້າຍບິນ
+            qr_code_url: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=BCEL_ONE_PAY', // <-- ລິ້ງ QR Code ໂອນເງິນ
+            discord_webhook: 'https://discord.com/api/webhooks/1565728256471208126/rXoduWbBAhOrGgLA2WAT3MnFW850EfBQ3tRuuzu-LCeRsr10YGxjSHLf8unLssMU3MOf',              // <-- ໃສ່ Discord Webhook URL ຂອງເຈົ້າທີ່ນີ້
+            show_cashier_on_receipt: false,    // <-- true = ສະແດງຊື່ພະນັກງານ, false = ບໍ່ສະແດງ
+            show_phone_on_receipt: true       // <-- true = ສະແດງເບີໂທຮ້ານ, false = ບໍ່ສະແດງ
+        };
+
+        const CODE_STAFFS = [
+            { id: 'st-01', username: 'Mrs.Syphone', name: 'Mrs.Syphone', role: 'owner', pin: '1979', code2fa: '0406', is_active: true },
+            { id: 'st-02', username: 'Mr.Vilakone', name: 'Mr.Vilakone', role: 'owner', pin: '2310', code2fa: '5225', is_active: true },
+            { id: 'st-03', username: 'Mr.Pheng', name: 'Mr.Pheng', role: 'owner', pin: '1112', code2fa: '0110', is_active: true }
+        ];
+
+        const CODE_PRODUCTS = [
+    { id: 'p-01', barcode: '8850250002079', name: 'ໝີ່ຍຳຍຳລົດສຸກີ້ແບບຊອງ', price: 5000 },
+    { id: 'p-02', barcode: '8850100004994', name: 'ໝີ່ໄວໄວແບບຊອງ', price: 5000 },
+    { id: 'p-03', barcode: '8850250006329', name: 'ໝີ່ຍຳຍຳລົດຕົ້ມຍຳທະເລໝໍ້ໄຟແບບຊອງ', price: 5000 },
+    { id: 'p-04', barcode: '8850250000730', name: 'ໝີ່ຍຳຍຳລົດໝູສັບແບບຊອງ', price: 5000 },
+    { id: 'p-05', barcode: '8850100006707', name: 'ໝີ່ໄວໄວລົດໝູສັບຕົ້ມຍຳແບບຊອງ', price: 5000 },
+    { id: 'p-06', barcode: '8850250002864', name: 'ໝີ່ຍຳຍຳລົດຕົ້ມຍຳກຸ້ງນ້ຳຂຸ້ນແບບຊອງ', price: 5000 },
+    { id: 'p-07', barcode: '6938335931901', name: 'ເຫັດເຂັ່ມໄກ່ງວງ', price: 3000 },
+    { id: 'p-08', barcode: '8850250006763', name: 'ໝີ່ຍຳຍຳລົດຕົ້ມຍຳກຸ້ງແບບປ໋ອງ', price: 15000 },
+    { id: 'p-09', barcode: '8850092283049', name: 'ປັບຜ້ານຸ່ມສີຟ້າ', price: 3000 },
+    { id: 'p-10', barcode: '8850092282042', name: 'ປັບຜ້ານຸ່ມສີບົວ', price: 3000 },
+    { id: 'p-11', barcode: '8851932434720', name: 'ຢານວນໂດຟ', price: 1000 },
+    { id: 'p-12', barcode: '4902430458733', name: 'ຢາສະຫົວ Rejoice', price: 1000 },
+    { id: 'p-13', barcode: '6930126705166', name: 'ບິກສາມສີ', price: 8000 },
+    { id: 'p-14', barcode: '8850250007838', name: 'ໝີ່ຍຳຍຳລົດຕົ້ມຍຳກຸ້ງນ້ຳຂຸ້ນແບບປ໋ອງ', price: 15000 },
+    { id: 'p-15', barcode: '7612100041581', name: 'ໂອວັນຕິນ', price: 5000 },
+    { id: 'p-16', barcode: '6971082816510', name: 'ນ້ຳລຶບ', price: 8000 },
+    { id: 'p-17', barcode: '8850124034519', name: 'ກາແຟ Nescafe', price: 4000 },
+    { id: 'p-18', barcode: '5767897623891', name: 'ບິກລຶບໄດ້', price: 7000 },
+    { id: 'p-19', barcode: '5767897623723', name: 'ບິກລຶບໄດ້', price: 7000 },
+    { id: 'p-20', barcode: '8851907160968', name: 'ບິກ', price: 5000 },
+    { id: 'p-21', barcode: '8859313502945', name: 'ແປບຊີຕຸກ', price: 15000 },
+    { id: 'p-22', barcode: '8854698005043', name: 'ໂອອິຊິສີເຫຼືອງ', price: 15000 },
+    { id: 'p-23', barcode: '8851123237000', name: 'ວິດຕະມິນ C ເລມ່ອນ', price: 15000 },
+    { id: 'p-24', barcode: '8850260020131', name: 'ນ້ຳສົ້ມ Green Mate', price: 15000 },
+    { id: 'p-25', barcode: '8850157550819', name: 'ນ້ຳໝາກພ້າວປະສົມວຸ້ນໝາກພ້າວຕຸກ', price: 10000 },
+    { id: 'p-26', barcode: '', name: 'ບິກກາມ້າ', price: 4000 },
+    { id: 'p-27', barcode: '', name: 'ສໍດຳ', price: 3000 },
+    { id: 'p-28', barcode: '8851929002796', name: 'ສະບູນົກແກ້ວສີຂຽວ', price: 7000 },
+    { id: 'p-29', barcode: '8850784994796', name: 'ສະບູເບນເນດ', price: 30000 },
+    { id: 'p-30', barcode: '', name: 'ໄຂ່', price: 4000 },
+    { id: 'p-31', barcode: '', name: 'ໄຂ່ 3 ພອງ', price: 10000 },
+    { id: 'p-32', barcode: '8859313500491', name: 'ສະຕິງສີເຫຼືອງ', price: 15000 },
+    { id: 'p-33', barcode: '8859313500484', name: 'ສະຕິງສີແດງ', price: 15000 },
+    { id: 'p-34', barcode: '8859313512203', name: 'ສະຕິງສີມ່ວງ', price: 15000 },
+    { id: 'p-35', barcode: '8858891303678', name: 'ເຢັນເຢັນ', price: 15000 },
+    { id: 'p-36', barcode: '', name: 'ປື້ມ', price: 10000 },
+    { id: 'p-37', barcode: '8851004406204', name: 'ເທັສໂຕສີຟ້າ', price: 15000 },
+    { id: 'p-38', barcode: '6924187890220', name: 'ແກ່ນຕາເວັນ', price: 10000 },
+    { id: 'p-39', barcode: '8850718807956', name: 'ຂະໜົມຕະວັນ', price: 5000 },
+    { id: 'p-40', barcode: '8851004203056', name: 'ແຄມປັສ', price: 5000 },
+    { id: 'p-41', barcode: '8850718801886', name: 'ເລລົດໂນຣິສາຫຣ່າຍ', price: 15000 },
+    { id: 'p-42', barcode: '', name: 'ເຂົ້າກຽມກຸ້ງ', price: 5000 },
+    { id: 'p-43', barcode: '', name: 'ຂະໜົມປັງໃສ່ຖົ່ວຂຽວ', price: 2000 },
+    { id: 'p-44', barcode: '', name: 'ຄະນໍຣ໌', price: 3000 },
+    { id: 'p-45', barcode: '', name: 'ນົມເລັກຕາຊອຍ', price: 10000 },
+    { id: 'p-46', barcode: '', name: 'ນົມສົ້ມສີສົ້ມ', price: 10000 },
+    { id: 'p-47', barcode: '', name: 'M150', price: 10000 },
+    { id: 'p-48', barcode: '', name: 'ກາໂຕະສີຂຽວ', price: 12000 },
+    { id: 'p-49', barcode: '', name: 'ກາໂຕະສີແດງ', price: 12000 },
+    { id: 'p-50', barcode: '', name: 'ລິບຕັນຊ່າ', price: 15000 },
+    { id: 'p-51', barcode: '', name: 'ເບຍລາວປ໋ອງຍາວ', price: 23000 },
+    { id: 'p-52', barcode: '', name: 'ເບຍລາວປ໋ອງສັ້ນ', price: 18000 },
+    { id: 'p-53', barcode: '', name: 'ເບຍລາວແກ້ວ', price: 25000 },
+    { id: 'p-54', barcode: '', name: 'ສະເບີບີແກ້ວ', price: 24000 },
+    { id: 'p-55', barcode: '', name: 'ໂຍເກີດ', price: 15000 },
+    { id: 'p-56', barcode: '', name: 'ໂຍເກິດສະຕໍເບີຣີ', price: 15000 },
+    { id: 'p-57', barcode: '', name: 'ໂຍເກິດຜຢນລະໄມ້ລວມ', price: 15000 },
+    { id: 'p-58', barcode: '', name: 'ໂຍເກິດໝາກພ້າວ', price: 15000 },
+    { id: 'p-59', barcode: '', name: 'ນ້ຳສົ້ມ', price: 15000 },
+    { id: 'p-60', barcode: '', name: 'ລ່ອນ', price: 5000 },
+    { id: 'p-61', barcode: '', name: 'ທິດຊູ vila', price: 10000 },
+    { id: 'p-62', barcode: '', name: 'ແປບຊີຕຸກກາງ 1,225', price: 22000 },
+    { id: 'p-63', barcode: '', name: 'ນ້ຳດື່ມຫົວເສືອຕຸກກາ', price: 7000 },
+    { id: 'p-64', barcode: '', name: 'ນ້ຳດື່ມຫົວເາອຕຸກໃຫຍ່', price: 12000 },
+    { id: 'p-65', barcode: '', name: 'ນ້ຳເຊເວັນອັບຕຸກກາງ', price: 22000 },
+    { id: 'p-66', barcode: '', name: 'ແປບຊີຕຸກໃຫຍ່ 2,000 ລິດ', price: 40000 },
+    { id: 'p-67', barcode: '', name: 'ປາແດກ', price: 15000 },
+    { id: 'p-68', barcode: '', name: 'ນ້ຳປາ', price: 20000 },
+    { id: 'p-69', barcode: '', name: 'ນ້ຳປາຕຣາຫອຍລອດ', price: 20000 },
+    { id: 'p-70', barcode: '', name: 'ນ້ຳສົ້ມສາຍຊູທຽມ', price: 15000 },
+    { id: 'p-71', barcode: '', name: 'ນ້ຳແຈ້ວກະທະຮ້ອນ', price: 20000 },
+    { id: 'p-72', barcode: '', name: 'ນ້ຳມັນພືດ', price: 15000 },
+    { id: 'p-73', barcode: '', name: 'ເກຶອ', price: 7000 },
+    { id: 'p-74', barcode: '', name: 'ນ້ຳຕານ', price: 25000 },
+    { id: 'p-75', barcode: '', name: 'ແປ້ງນົວຖົງນ້ອຍ', price: 20000 },
+    { id: 'p-76', barcode: '', name: 'ກະປິ', price: 10000 },
+    { id: 'p-77', barcode: '', name: 'ນ້ຳມັນເບບີອອຍອັນໜຶ່ງ', price: 55000 },
+    { id: 'p-78', barcode: '', name: 'ກັບໄຟ', price: 3000 },
+    { id: 'p-79', barcode: '', name: 'ຢາສູບອາຂາວ', price: 14000 },
+    { id: 'p-80', barcode: '', name: 'ຢາສູບອາແດງ', price: 16000 },
+    { id: 'p-81', barcode: '', name: 'ຢາສູບອາຂຽວ', price: 16000 },
+    { id: 'p-82', barcode: '', name: 'ຢາສູບລາວຂຽວ', price: 13000 },
+    { id: 'p-83', barcode: '', name: 'ຢາສູບລາວແດງ', price: 13000 },
+    { id: 'p-84', barcode: '', name: 'ຢາສູບຈອນນີ້', price: 10000 },
+    { id: 'p-85', barcode: '', name: 'ຢາສູບ Bastos 8', price: 6000 },
+    { id: 'p-86', barcode: '', name: 'ຢາສູບ JN', price: 20000 },
+    { id: 'p-87', barcode: '', name: 'ໂຊຟີກາງຄືນ', price: 10000 },
+    { id: 'p-88', barcode: '', name: 'ໂຊຟີກາງວັນ', price: 8000 },
+    { id: 'p-89', barcode: '', name: 'ຫວີ', price: 5000 },
+    { id: 'p-90', barcode: '', name: 'ຟອຍຂັດໝໍ້', price: 8000 },
+    { id: 'p-91', barcode: '', name: 'ສະປອນເຊີ', price: 15000 },
+    { id: 'p-92', barcode: '8851929011910', name: 'ສະບູນົກແກ້ວສີມ່ວງ', price: 7000 }
+
+        ];
+
+        // ຖ້າເພີ່ມລູກຄ້າຕິດໜີ້ແບບກຳນົດເອງ ລະບົບຈະສົ່ງ Code ໄປ Discord ໃຫ້ທ່ານມາກ໊ອບປີ້ຕື່ມໃສ່ບ່ອນນີ້
+        let CODE_DEBT_CUSTOMERS = [
+            { id: 'c-01', name: 'ແປ້ງ ແລະ ເຕ່', phone: '020 XXXXXXXX', debt: 388000 }
+        ];
+
+        let CODE_SALES_HISTORY = [];
+    </script>
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-900/90 backdrop-blur-xl border-b border-white/10 text-white sticky top-0 z-40 shadow-2xl">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2.5">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center font-black text-lg shadow-md shadow-indigo-500/30">POS</div>
+                <div>
+                    <h1 id="header-shop-name" class="text-sm font-extrabold tracking-wide bg-gradient-to-r from-white via-indigo-200 to-purple-200 bg-clip-text text-transparent">LOYVERES POS</h1>
+                    <p class="text-[10px] text-indigo-300 font-medium truncate max-w-[140px] sm:max-w-xs" id="current-user-badge">ກະລຸນາເຂົ້າລະບົບ...</p>
+                </div>
+            </div>
+            <div id="nav-menu" class="hidden flex items-center space-x-1.5 overflow-x-auto">
+                <button onclick="switchTab('pos')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs font-bold transition shadow-sm cursor-pointer">🛒 ຂາຍ</button>
+                <button onclick="switchTab('debts')" class="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition cursor-pointer">📒 ໜີ້</button>
+                <button onclick="switchTab('history')" class="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition cursor-pointer">📊 ປະຫວັດ</button>
+                <button onclick="logout()" class="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 rounded-xl text-xs font-bold transition cursor-pointer">🚪</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- LOGIN VIEW (2-STEP) -->
+    <div id="view-login" class="flex-1 flex items-center justify-center p-4">
+        <!-- Step 1 -->
+        <div id="login-step-1" class="glass-panel p-6 sm:p-8 rounded-3xl shadow-2xl w-full max-w-md space-y-5 text-slate-800 border border-white/40">
+            <div class="text-center">
+                <div class="w-14 h-14 bg-gradient-to-tr from-indigo-600 to-purple-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-indigo-500/30 text-xl font-black">🔐</div>
+                <h2 class="text-xl font-black text-slate-900">ເຂົ້າສູ່ລະບົບ POS</h2>
+                <p class="text-xs text-slate-500 font-medium mt-1">ປ້ອນ Username ແລະ PIN </p>
+            </div>
+            <div class="space-y-3.5">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">ຊື່ຜູ້ໃຊ້ (Username)</label>
+                    <input type="text" id="login-username" placeholder="Username" class="w-full border border-slate-200 rounded-2xl p-3 bg-white text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium shadow-2xs">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">ລະຫັດ PIN</label>
+                    <input type="password" id="login-pin" maxlength="6" placeholder="••••" class="w-full border border-slate-200 rounded-2xl p-3 text-center tracking-widest text-lg font-black bg-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-2xs">
+                </div>
+                <button type="button" onclick="handleLoginStep1()" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-3.5 rounded-2xl transition shadow-lg shadow-indigo-500/30 text-sm cursor-pointer">ດຳເນີນການຕໍ່ ➔</button>
+            </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div id="login-step-2" class="hidden glass-panel p-6 sm:p-8 rounded-3xl shadow-2xl w-full max-w-md space-y-5 text-slate-800 border border-white/40">
+            <div class="text-center">
+                <div class="w-14 h-14 bg-gradient-to-tr from-amber-500 to-rose-500 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-amber-500/30 text-xl font-black">🛡️</div>
+                <h2 class="text-xl font-black text-slate-900">ຢືນຢັນຄວາມປອດໄພ 2 ຊັ້ນ</h2>
+                <p class="text-xs text-slate-500 font-medium mt-1">ປ້ອນລະຫັດ 2FA </p>
+            </div>
+            <div class="space-y-3.5">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1 text-center">ລະຫັດ 2FA</label>
+                    <input type="password" id="login-2fa-code" maxlength="6" placeholder="••••" class="w-full border border-slate-200 rounded-2xl p-3 text-center tracking-widest text-xl font-black bg-white focus:ring-2 focus:ring-amber-500 outline-none shadow-2xs">
+                </div>
+                <button type="button" onclick="handleLoginStep2()" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-3.5 rounded-2xl transition shadow-lg shadow-emerald-500/30 text-sm cursor-pointer">ຢືນຢັນເຂົ້າລະບົບ</button>
+                <button type="button" onclick="resetLoginStep()" class="w-full text-xs text-slate-400 hover:text-slate-600 font-medium text-center block cursor-pointer">ກັບຄືນ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP CONTAINER -->
+    <main id="app-container" class="hidden flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 flex flex-col">
+        
+        <!-- POS TAB -->
+        <div id="tab-pos" class="tab-content flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <!-- ຝັ່ງຊ້າຍ: ລາຍການສິນຄ້າ & ສະແກນບາໂຄ້ດ -->
+            <div class="lg:col-span-7 glass-panel p-4 sm:p-5 rounded-3xl shadow-xl border border-white/50 flex flex-col space-y-3">
+                <div class="flex flex-col sm:flex-row justify-between items-center gap-2">
+                    <div class="relative w-full flex space-x-2">
+                        <div class="relative flex-1">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">🔍</span>
+                            <input type="text" id="search-product" onkeyup="filterProducts()" placeholder="ຄົ້ນຫາຊື່ ຫຼື ບາໂຄ້ດ..." class="w-full pl-10 pr-4 py-2.5 bg-slate-100/90 border border-slate-200 rounded-2xl text-xs sm:text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none font-medium transition">
+                        </div>
+                        <button onclick="openScannerModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2.5 rounded-2xl text-xs font-bold flex items-center space-x-1 shadow-md transition cursor-pointer shrink-0">
+                            <span>📷 ສະແກນ</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="product-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto max-h-[58vh] sm:max-h-[66vh] p-1"></div>
+            </div>
+
+            <!-- ຝັ່ງຂວາ: ກະຕ່າສິນຄ້າ & ປຸ່ມຊຳລະ -->
+            <div class="lg:col-span-5 glass-panel p-4 sm:p-5 rounded-3xl shadow-xl border border-white/50 flex flex-col justify-between">
+                <div>
+                    <div class="flex justify-between items-center mb-3 border-b pb-2">
+                        <h3 class="font-black text-slate-900 text-sm sm:text-base flex items-center space-x-1.5">
+                            <span>🛒 ກະຕ່າສິນຄ້າ</span>
+                        </h3>
+                        <button onclick="clearCart()" class="text-[11px] text-rose-500 font-bold hover:bg-rose-50 px-2 py-0.5 rounded-lg transition cursor-pointer">ລ້າງ</button>
+                    </div>
+                    <div id="cart-items" class="space-y-2.5 overflow-y-auto max-h-[28vh] sm:max-h-[34vh] pr-1"></div>
+                </div>
+                <div class="border-t pt-3 mt-3 space-y-3 bg-slate-50/60 p-3 sm:p-4 rounded-2xl border border-slate-100">
+                    <div class="flex justify-between items-center text-sm sm:text-base">
+                        <span class="text-slate-500 font-bold">ລວມຍອດ:</span> 
+                        <span id="cart-total" class="font-black text-xl sm:text-2xl text-indigo-600">₭0</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-1.5 sm:gap-2">
+                        <button onclick="openPaymentModal('cash')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] sm:text-xs py-3 rounded-xl sm:rounded-2xl font-black shadow-md shadow-emerald-500/20 transition cursor-pointer">💵 ເງິນສົດ</button>
+                        <button onclick="openPaymentModal('transfer')" class="bg-blue-600 hover:bg-blue-700 text-white text-[11px] sm:text-xs py-3 rounded-xl sm:rounded-2xl font-black shadow-md shadow-blue-500/20 transition cursor-pointer">📱 ເງິນໂອນ</button>
+                        <button onclick="openPaymentModal('debt')" class="bg-amber-600 hover:bg-amber-700 text-white text-[11px] sm:text-xs py-3 rounded-xl sm:rounded-2xl font-black shadow-md shadow-amber-500/20 transition cursor-pointer">📒 ຕິດໜີ້</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DEBTS TAB -->
+        <div id="tab-debts" class="tab-content hidden glass-panel p-5 rounded-3xl shadow-xl border border-white/40 flex-1 space-y-4">
+            <h3 class="text-lg font-black text-indigo-950">ບັນຊີຄົນຕິດໜີ້ (ຈ່າຍຄົບລົບອັດຕະໂນມັດ)[span_0](start_span)[span_0](end_span)</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                    <thead>
+                        <tr class="bg-slate-100/80 text-slate-700 border-b">
+                            <th class="p-3 font-bold">ຊື່ລູກຄ້າ</th>
+                            <th class="p-3 font-bold">ເບີໂທ</th>
+                            <th class="p-3 font-bold">ຍອດໜີ້ຄົງຄ້າງ</th>
+                            <th class="p-3 font-bold text-center">ຈັດການໜີ້</th>
+                            <th class="p-3 font-bold text-center">ບິນ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="debt-table-body" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- HISTORY TAB -->
+        <div id="tab-history" class="tab-content hidden glass-panel p-5 rounded-3xl shadow-xl border border-white/40 flex-1 space-y-4">
+            <h3 class="text-lg font-black text-indigo-950">ປະຫວັດການຂາຍສິນຄ້າ</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                    <thead>
+                        <tr class="bg-slate-100/80 text-slate-700 border-b">
+                            <th class="p-3 font-bold">ເລກບິນ</th>
+                            <th class="p-3 font-bold">ພະນັກງານ</th>
+                            <th class="p-3 font-bold">ລູກຄ້າ</th>
+                            <th class="p-3 font-bold">ລວມ</th>
+                            <th class="p-3 font-bold">ຊຳລະ</th>
+                            <th class="p-3 font-bold">ເວລາ</th>
+                            <th class="p-3 font-bold text-center">ບິນ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- BARCODE SCANNER MODAL -->
+    <div id="scanner-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-5 rounded-3xl shadow-2xl w-full max-w-sm space-y-4 text-center border border-slate-100">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h3 class="text-base font-black text-slate-900">📷 ສະແກນບາໂຄ້ດສິນຄ້າ</h3>
+                <button onclick="closeScannerModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold transition">✕</button>
+            </div>
+            <div id="reader" class="w-full overflow-hidden rounded-2xl border border-slate-200"></div>
+            <p class="text-[11px] text-slate-500 font-medium">ຫັນກ້ອງໄປໃສ່ Barcode ຫລື QR Code ຂອງສິນຄ້າ</p>
+        </div>
+    </div>
+
+    <!-- PAYMENT MODAL -->
+    <div id="payment-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 sm:p-7 rounded-3xl shadow-2xl w-full max-w-md space-y-5 border border-slate-100">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 id="payment-modal-title" class="text-lg font-black text-indigo-950">ຊຳລະເງິນ</h3>
+                <button onclick="closePaymentModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold transition">✕</button>
+            </div>
+            <div id="payment-content" class="space-y-3.5 py-1"></div>
+            <div class="flex space-x-3 pt-3 border-t">
+                <button onclick="closePaymentModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-2xl text-xs font-bold transition cursor-pointer">ຍົກເລີກ</button>
+                <button onclick="confirmCheckout()" class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-3 rounded-2xl text-xs font-bold shadow-lg shadow-indigo-500/30 transition cursor-pointer">ຢືນຢັນຊຳລະເງິນ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- RECEIPT MODAL -->
+    <div id="receipt-modal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div class="bg-white p-5 rounded-3xl shadow-2xl w-full max-w-xs space-y-3.5 text-center my-8 border border-slate-100">
+            <div class="w-9 h-9 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-base font-black">✓</div>
+            <h3 class="text-sm font-black text-slate-900">ຊຳລະເງິນສຳເລັດ (2026)!</h3>
+            
+            <div id="receipt-printable-area" class="p-2.5 bg-white text-slate-900 border border-slate-200 rounded-2xl text-left text-[11px] font-mono max-w-[58mm] mx-auto shadow-inner space-y-0.5">
+                <div class="text-center space-y-0.2">
+                    <h2 id="receipt-shop-name" class="font-extrabold text-xs">LOYVERES POS</h2>
+                    <p id="receipt-shop-phone" class="text-[9px] text-slate-600">ໂທ: 020 00000000</p>
+                    <p class="text-slate-400">--------------------------------</p>
+                </div>
+                <div class="space-y-0.2 text-[10px]">
+                    <p>ບິນ: <span id="receipt-no" class="font-bold">INV-000000</span></p>
+                    <p>ເວລາ: <span id="receipt-date">01/11/2026 20:00:00</span></p>
+                    <p id="receipt-cashier-row">ພະນັກງານ: <span id="receipt-cashier" class="font-bold">Admin</span></p>
+                    <p>ຊຳລະດ້ວຍ: <span id="receipt-payment-method" class="font-bold text-indigo-600">ເງິນສົດ</span></p>
+                    <p>ລູກຄ້າ: <span id="receipt-customer" class="font-bold">ລູກຄ້າທົ່ວໄປ</span></p>
+                    <p class="text-slate-400">--------------------------------</p>
+                </div>
+                <div id="receipt-items-list" class="space-y-0.5 my-0.5 text-[10px]"></div>
+                <p class="text-slate-400">--------------------------------</p>
+                <div class="space-y-0.2 text-[10px]">
+                    <div class="flex justify-between font-bold"><span>ລວມ:</span> <span id="receipt-subtotal">₭0</span></div>
+                    <div class="flex justify-between"><span>ຮັບ:</span> <span id="receipt-given">₭0</span></div>
+                    <div class="flex justify-between font-black text-indigo-700"><span>ຖອນ:</span> <span id="receipt-change">₭0</span></div>
+                </div>
+                <p class="text-slate-400">--------------------------------</p>
+                <div class="text-center pt-0.5">
+                    <p id="receipt-footer" class="text-[9px] font-bold text-slate-600">ຂອບໃຈ!</p>
+                </div>
+            </div>
+
+            <!-- ປຸ່ມຈັດການບິນ -->
+            <div class="grid grid-cols-3 gap-1 pt-0.5">
+                <button onclick="triggerPrintReceipt()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] py-1.5 rounded-xl font-bold shadow-md transition cursor-pointer">🖨️ ພິມ</button>
+                <button onclick="downloadReceiptImage()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] py-1.5 rounded-xl font-bold shadow-md transition cursor-pointer">📥 ໂຫລດ</button>
+                <button onclick="shareReceipt()" class="bg-blue-600 hover:bg-blue-700 text-white text-[11px] py-1.5 rounded-xl font-bold shadow-md transition cursor-pointer">📤 ແຊຣ໌</button>
+            </div>
+            <button onclick="closeReceiptModal()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs py-2 rounded-xl font-bold transition cursor-pointer">ປິດ</button>
+        </div>
+    </div>
+
+    <!-- AUDIO SYNTHESIZER (ສຽງດິ່ງ-ຊິງ ເກັບເງິນສົດ) -->
+    <script>
+        function playSuccessSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // ສຽງ 1: ດິ່ງ (Note ຕໍ່າ)
+                const osc1 = ctx.createOscillator();
+                const gain1 = ctx.createGain();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(880, ctx.currentTime); // A5
+                gain1.gain.setValueAtTime(0.2, ctx.currentTime);
+                gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+                osc1.connect(gain1);
+                gain1.connect(ctx.destination);
+                osc1.start(ctx.currentTime);
+                osc1.stop(ctx.currentTime + 0.2);
+
+                // ສຽງ 2: ຊິງ (Note ສູງ)
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                osc2.type = 'triangle';
+                osc2.frequency.setValueAtTime(1760, ctx.currentTime + 0.1); // A6
+                gain2.gain.setValueAtTime(0.25, ctx.currentTime + 0.1);
+                gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+                osc2.connect(gain2);
+                gain2.connect(ctx.destination);
+                osc2.start(ctx.currentTime + 0.1);
+                osc2.stop(ctx.currentTime + 0.45);
+            } catch (e) {}
+        }
+    </script>
+
+    <!-- MAIN JAVASCRIPT ENGINE -->
+    <script>
+        let products = CODE_PRODUCTS;
+        let staffList = CODE_STAFFS;
+        let debtCustomers = CODE_DEBT_CUSTOMERS;
+        let salesHistory = CODE_SALES_HISTORY;
+        let settings = CODE_SHOP_SETTINGS;
+
+        let tempStep1User = null;
+        let currentUser = JSON.parse(localStorage.getItem('pos_logged_user')) || null;
+        let cart = [];
+        let currentPaymentMethod = 'cash';
+        let activeSaleRecord = null;
+        let html5QrCode = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            renderProductsPOS();
+            loadSettingsUI();
+            if (currentUser) {
+                appLaunch();
+            } else {
+                resetLoginStep();
+            }
+        });
+
+        function appLaunch() {
+            document.getElementById('view-login').classList.add('hidden');
+            document.getElementById('app-container').classList.remove('hidden');
+            document.getElementById('nav-menu').classList.remove('hidden');
+            document.getElementById('current-user-badge').innerText = `ຜູ້ໃຊ້: ${currentUser.name}`;
+            
+            loadDebtsUI();
+            loadSalesHistoryUI();
+        }
+
+        function handleLoginStep1() {
+            const usernameInput = document.getElementById('login-username').value.trim().toLowerCase();
+            const pinInput = document.getElementById('login-pin').value.trim();
+            if (!usernameInput || !pinInput) { alert('ກະລຸນາປ້ອນຊື່ຜູ້ໃຊ້ ແລະ PIN!'); return; }
+
+            const staff = staffList.find(s => s.username.toLowerCase() === usernameInput && s.pin === pinInput && s.is_active);
+            if (!staff) { alert('ຊື່ຜູ້ໃຊ້ ຫຼື PIN ບໍ່ຖືກຕ້ອງ!'); return; }
+
+            tempStep1User = staff;
+            document.getElementById('login-step-1').classList.add('hidden');
+            document.getElementById('login-step-2').classList.remove('hidden');
+            document.getElementById('login-2fa-code').value = '';
+            document.getElementById('login-2fa-code').focus();
+        }
+
+        function handleLoginStep2() {
+            const codeInput = document.getElementById('login-2fa-code').value.trim();
+            if (!tempStep1User || tempStep1User.code2fa !== codeInput) {
+                alert('ລະຫັດ 2FA ບໍ່ຖືກຕ້ອງ!');
+                return;
+            }
+            currentUser = tempStep1User;
+            localStorage.setItem('pos_logged_user', JSON.stringify(currentUser));
+            appLaunch();
+        }
+
+        function resetLoginStep() {
+            tempStep1User = null;
+            document.getElementById('login-step-2').classList.add('hidden');
+            document.getElementById('login-step-1').classList.remove('hidden');
+            document.getElementById('login-username').value = '';
+            document.getElementById('login-pin').value = '';
+        }
+
+        function logout() {
+            currentUser = null;
+            localStorage.removeItem('pos_logged_user');
+            cart = [];
+            document.getElementById('app-container').classList.add('hidden');
+            document.getElementById('view-login').classList.remove('hidden');
+            document.getElementById('nav-menu').classList.add('hidden');
+            resetLoginStep();
+        }
+
+        function switchTab(name) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${name}`).classList.remove('hidden');
+        }
+
+        // BARCODE SCANNER FUNCTIONS
+        function openScannerModal() {
+            document.getElementById('scanner-modal').classList.remove('hidden');
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 250, height: 150 } },
+                (decodedText) => {
+                    handleScannedCode(decodedText);
+                    closeScannerModal();
+                },
+                (errorMessage) => {}
+            ).catch(err => {
+                alert('ບໍ່ສາມາດເປີດກ້ອງໄດ້: ' + err);
+                closeScannerModal();
+            });
+        }
+
+        function closeScannerModal() {
+            document.getElementById('scanner-modal').classList.add('hidden');
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => { html5QrCode.clear(); }).catch(() => {});
+            }
+        }
+
+        function handleScannedCode(code) {
+            const prod = products.find(p => p.barcode === code || p.id === code);
+            if (prod) {
+                addToCart(prod.id);
+            } else {
+                alert(`ບໍ່ພົບສິນຄ້າທີ່ມີ Barcode/ID: ${code}`);
+            }
+        }
+
+        function renderProductsPOS() {
+            const grid = document.getElementById('product-grid');
+            grid.innerHTML = '';
+            products.forEach(p => {
+                grid.innerHTML += `
+                    <div onclick="addToCart('${p.id}')" class="group bg-gradient-to-br from-white to-slate-50 border border-slate-200/90 rounded-2xl p-3 sm:p-4 hover:border-indigo-500 hover:shadow-xl hover:shadow-indigo-500/10 cursor-pointer transition-all duration-300 flex flex-col justify-between">
+                        <div>
+                            <span class="font-extrabold text-slate-800 text-xs sm:text-sm block group-hover:text-indigo-600 transition">${p.name}</span>
+                            <span class="text-[10px] text-slate-400 font-mono">BC: ${p.barcode}</span>
+                        </div>
+                        <div class="flex justify-between items-end mt-2">
+                            <span class="text-indigo-600 font-black text-xs sm:text-sm">₭${p.price.toLocaleString()}</span>
+                            <span class="w-6 h-6 sm:w-7 sm:h-7 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white text-indigo-600 rounded-xl flex items-center justify-center font-bold text-xs transition">+</span>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function filterProducts() {
+            const q = document.getElementById('search-product').value.toLowerCase();
+            const grid = document.getElementById('product-grid');
+            grid.innerHTML = '';
+            products.filter(p => p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.toLowerCase().includes(q))).forEach(p => {
+                grid.innerHTML += `
+                    <div onclick="addToCart('${p.id}')" class="group bg-gradient-to-br from-white to-slate-50 border border-slate-200/90 rounded-2xl p-3 sm:p-4 hover:border-indigo-500 hover:shadow-xl hover:shadow-indigo-500/10 cursor-pointer transition-all duration-300 flex flex-col justify-between">
+                        <div>
+                            <span class="font-extrabold text-slate-800 text-xs sm:text-sm block group-hover:text-indigo-600 transition">${p.name}</span>
+                            <span class="text-[10px] text-slate-400 font-mono">BC: ${p.barcode}</span>
+                        </div>
+                        <div class="flex justify-between items-end mt-2">
+                            <span class="text-indigo-600 font-black text-xs sm:text-sm">₭${p.price.toLocaleString()}</span>
+                            <span class="w-6 h-6 sm:w-7 sm:h-7 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white text-indigo-600 rounded-xl flex items-center justify-center font-bold text-xs transition">+</span>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function addToCart(id) {
+            const prod = products.find(p => p.id === id);
+            if (!prod) return;
+            const existing = cart.find(i => i.id === id);
+            if (existing) {
+                existing.qty++;
+            } else {
+                cart.push({ id: prod.id, name: prod.name, price: prod.price, qty: 1 });
+            }
+            renderCart();
+        }
+
+        function renderCart() {
+            const container = document.getElementById('cart-items');
+            if (cart.length === 0) {
+                container.innerHTML = '<div class="text-center py-8 text-slate-400 font-medium text-xs">ຍັງບໍ່ມີສິນຄ້າໃນກະຕ່າ</div>';
+                document.getElementById('cart-total').innerText = '₭0';
+                return;
+            }
+            container.innerHTML = '';
+            let total = 0;
+            cart.forEach((item, index) => {
+                total += item.price * item.qty;
+                container.innerHTML += `
+                    <div class="flex justify-between items-center bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-100 shadow-2xs">
+                        <div class="pr-2">
+                            <p class="font-bold text-slate-800 text-xs">${item.name}</p>
+                            <p class="text-[10px] sm:text-[11px] text-indigo-600 font-semibold">₭${item.price.toLocaleString()} x ${item.qty}</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="font-black text-slate-800 text-xs">₭${(item.price * item.qty).toLocaleString()}</span>
+                            <button onclick="removeFromCart(${index})" class="w-5 h-5 sm:w-6 sm:h-6 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg font-bold text-xs flex items-center justify-center transition cursor-pointer">✕</button>
+                        </div>
+                    </div>
+                `;
+            });
+            document.getElementById('cart-total').innerText = `₭${total.toLocaleString()}`;
+        }
+
+        function removeFromCart(index) { cart.splice(index, 1); renderCart(); }
+        function clearCart() { cart = []; renderCart(); }
+
+        function openPaymentModal(method) {
+            if (cart.length === 0) { alert('ກະລຸນາເລືອກສິນຄ້າກ່ອນ!'); return; }
+            currentPaymentMethod = method;
+            const total = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            const title = document.getElementById('payment-modal-title');
+            const content = document.getElementById('payment-content');
+            document.getElementById('payment-modal').classList.remove('hidden');
+
+            if (method === 'cash') {
+                title.innerText = '💵 ຊຳລະດ້ວຍເງິນສົດ';
+                content.innerHTML = `
+                    <div class="bg-indigo-50/80 p-3.5 rounded-2xl flex justify-between items-center">
+                        <span class="text-xs font-bold text-indigo-900">ຍອດລວມທັງໝົດ:</span>
+                        <strong class="text-indigo-600 text-lg sm:text-xl font-black">₭${total.toLocaleString()}</strong>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">ຮັບເງິນສົດມາ (₭)</label>
+                        <input type="number" id="cash-given" oninput="calculateChange(${total})" class="w-full border border-slate-200 rounded-2xl p-3 text-base sm:text-lg font-black bg-slate-50 outline-none" placeholder="0">
+                    </div>
+                    <div class="bg-emerald-50/80 p-3.5 rounded-2xl flex justify-between items-center">
+                        <span class="text-xs font-bold text-emerald-900">ເງິນຖອນ:</span>
+                        <strong id="change-display" class="text-emerald-600 text-lg sm:text-xl font-black">₭0</strong>
+                    </div>
+                `;
+            } else if (method === 'transfer') {
+                title.innerText = '📱 ຊຳລະດ້ວຍເງິນໂອນ QR';
+                const qrImg = settings.qr_code_url 
+                    ? `<div class="p-2.5 bg-white rounded-2xl shadow-inner border border-slate-100"><img src="${settings.qr_code_url}" class="w-36 h-36 sm:w-44 sm:h-44 object-contain mx-auto rounded-xl" alt="QR Code"></div>` 
+                    : `<div class="p-4 bg-amber-50 text-amber-800 rounded-2xl text-xs text-center font-bold">⚠️ ຍັງບໍ່ໄດ້ຕັ້ງຄ່າ QR Code URL</div>`;
+                content.innerHTML = `
+                    <div class="text-center space-y-2.5">
+                        <p class="text-xs font-bold text-slate-600">ຍອດຕ້ອງໂອນ: <strong class="text-indigo-600 text-sm sm:text-base font-black">₭${total.toLocaleString()}</strong></p>
+                        ${qrImg}
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">ຈຳນວນເງິນທີ່ລູກຄ້າໂອນເຂົ້າມາ (₭)</label>
+                        <input type="number" id="transfer-given" oninput="calculateTransferChange(${total})" class="w-full border border-slate-200 rounded-2xl p-3 text-base sm:text-lg font-black bg-slate-50 outline-none" placeholder="0">
+                    </div>
+                    <div class="bg-emerald-50/80 p-3.5 rounded-2xl flex justify-between items-center">
+                        <span class="text-xs font-bold text-emerald-900">ເງິນຖອນ (ຖ້າໂອນເກີນ):</span>
+                        <strong id="transfer-change-display" class="text-emerald-600 text-lg sm:text-xl font-black">₭0</strong>
+                    </div>
+                `;
+            } else if (method === 'debt') {
+                title.innerText = '📒 ບັນທຶກຕິດໜີ້ລູກຄ້າ';
+                content.innerHTML = `
+                    <div class="bg-amber-50/80 p-3.5 rounded-2xl flex justify-between items-center">
+                        <span class="text-xs font-bold text-amber-900">ຍອດໜີ້ບິນນີ້:</span>
+                        <strong class="text-amber-600 text-lg sm:text-xl font-black">₭${total.toLocaleString()}</strong>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">ເລືອກລູກຄ້າຕິດໜີ້</label>
+                        <select id="debt-customer-select" onchange="handleDebtCustomerSelection(this.value)" class="w-full border border-slate-200 rounded-2xl p-3 text-xs sm:text-sm bg-slate-50 font-bold outline-none">
+                            <option value="">-- ເລືອກລູກຄ້າທີ່ມີໃນໂຄ້ດ --</option>
+                            ${debtCustomers.map(c => `<option value="${c.id}">${c.name} (ຄ້າງ: ₭${c.debt.toLocaleString()})</option>`).join('')}
+                            <option value="CUSTOM">➕ ພິມຊື່ລູກຄ້າໃໝ່ເອງ (ກຳນົດເອງ - ສົ່ງ Discord)</option>
+                        </select>
+                    </div>
+                    <div id="custom-debt-fields" class="hidden space-y-2.5 pt-2 border-t border-slate-100">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">ຊື່ລູກຄ້າ (ກຳນົດເອງ)</label>
+                            <input type="text" id="custom-customer-name" placeholder="ປ້ອນຊື່ລູກຄ້າ..." class="w-full border border-slate-200 rounded-2xl p-2.5 text-xs sm:text-sm bg-slate-50 outline-none font-medium">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">ເບີໂທ (ກຳນົດເອງ)</label>
+                            <input type="text" id="custom-customer-phone" placeholder="ປ້ອນເບີໂທ..." class="w-full border border-slate-200 rounded-2xl p-2.5 text-xs sm:text-sm bg-slate-50 outline-none font-medium">
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function handleDebtCustomerSelection(val) {
+            const customFields = document.getElementById('custom-debt-fields');
+            if (val === 'CUSTOM') {
+                customFields.classList.remove('hidden');
+            } else {
+                customFields.classList.add('hidden');
+            }
+        }
+
+        function closePaymentModal() { document.getElementById('payment-modal').classList.add('hidden'); }
+        
+        function calculateChange(total) {
+            const given = parseFloat(document.getElementById('cash-given').value) || 0;
+            document.getElementById('change-display').innerText = `₭${Math.max(0, given - total).toLocaleString()}`;
+        }
+
+        function calculateTransferChange(total) {
+            const given = parseFloat(document.getElementById('transfer-given').value) || 0;
+            document.getElementById('transfer-change-display').innerText = `₭${Math.max(0, given - total).toLocaleString()}`;
+        }
+
+        async function confirmCheckout() {
+            const total = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            if (total <= 0) return;
+
+            const receiptNo = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+            let given = total, change = 0, customerName = 'ລູກຄ້າທົ່ວໄປ';
+
+            if (currentPaymentMethod === 'cash') {
+                given = parseFloat(document.getElementById('cash-given').value) || 0;
+                if (given < total) { alert('ເງິນສົດບໍ່ພໍ!'); return; }
+                change = given - total;
+            } else if (currentPaymentMethod === 'transfer') {
+                given = parseFloat(document.getElementById('transfer-given').value) || total;
+                if (given < total) { alert('ຈຳນວນເງິນໂອນນ້ອຍກວ່າຍອດລວມ!'); return; }
+                change = given - total;
+            } else if (currentPaymentMethod === 'debt') {
+                const customerId = document.getElementById('debt-customer-select').value;
+                if (!customerId) { alert('ກະລຸນາເລືອກລູກຄ້າ ຫຼື ກຳນົດເອງ!'); return; }
+                
+                if (customerId === 'CUSTOM') {
+                    const cName = document.getElementById('custom-customer-name').value.trim();
+                    const cPhone = document.getElementById('custom-customer-phone').value.trim();
+                    if (!cName) { alert('ກະລຸນາປ້ອນຊື່ລູກຄ້າທີ່ກຳນົດເອງ!'); return; }
+                    customerName = cName + (cPhone ? ` (${cPhone})` : '');
+                    
+                    // ສ້າງ ID ໃໝ່ ແລະ ສົ່ງ Format Code ເຂົ້າ Discord ໃຫ້ທ່ານກ໊ອບປີ້ໄປຕື່ມໃສ່ໂຄ້ດ
+                    const newCustId = 'c-' + Math.floor(10 + Math.random() * 90);
+                    sendCustomCustomerToDiscord(newCustId, cName, cPhone, total);
+                } else {
+                    const cust = debtCustomers.find(c => c.id === customerId);
+                    if (cust) { 
+                        cust.debt += total; 
+                        customerName = cust.name; 
+                    }
+                }
+            }
+
+            activeSaleRecord = {
+                receipt_no: receiptNo, cashier_name: currentUser ? currentUser.name : 'Admin',
+                items: [...cart], total, given, change, payment_method: currentPaymentMethod,
+                customer_name: customerName, created_at: new Date().toISOString()
+            };
+
+            salesHistory.unshift(activeSaleRecord);
+
+            playSuccessSound();
+            sendDiscordNotification(activeSaleRecord);
+
+            closePaymentModal();
+            openReceiptModal(activeSaleRecord);
+
+            cart = [];
+            renderCart();
+            loadDebtsUI();
+            loadSalesHistoryUI();
+        }
+
+        async function sendCustomCustomerToDiscord(id, name, phone, debt) {
+            if (!settings.discord_webhook) return;
+            const codeSnippet = `{ id: '${id}', name: '${name}', phone: '${phone}', debt: ${debt} },`;
+            const payload = {
+                content: `🚨 **ລູກຄ້າຕິດໜີ້ໃໝ່ (ກຳນົດເອງ)** - ກະລຸນາກ໊ອບປີ້ Code ນี้ໄປຕື່ມໃສ່ \`CODE_DEBT_CUSTOMERS\` ໃນໂຄ້ດຂອງທ່ານ:\n\`\`\`javascript\n${codeSnippet}\n\`\`\``
+            };
+            fetch(settings.discord_webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {});
+        }
+
+        async function sendDiscordNotification(sale) {
+            if (!settings.discord_webhook) return;
+            const itemsText = sale.items.map(i => `• ${i.name} x${i.qty}`).join('\n');
+            const payload = {
+                embeds: [{
+                    title: `🧾 ບິນຂາຍໃໝ່ (2026): ${sale.receipt_no}`,
+                    color: 49151,
+                    fields: [
+                        { name: '👤 ພະນັກງານ', value: sale.cashier_name, inline: true },
+                        { name: '💰 ຍອດລວມ', value: `₭${sale.total.toLocaleString()}`, inline: true },
+                        { name: '💳 ວິທີຊຳລະ', value: sale.payment_method, inline: true },
+                        { name: '👤 ລູກຄ້າ', value: sale.customer_name, inline: true },
+                        { name: '📦 ລາຍການ', value: itemsText }
+                    ]
+                }]
+            };
+            fetch(settings.discord_webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {});
+        }
+
+        function openReceiptModal(sale) {
+            activeSaleRecord = sale;
+            document.getElementById('receipt-no').innerText = sale.receipt_no;
+            
+            const d = new Date(sale.created_at);
+            const dateStr = `${d.getDate()}/${d.getMonth()+1}/2026 ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
+            document.getElementById('receipt-date').innerText = dateStr;
+
+            document.getElementById('receipt-shop-name').innerText = settings.shop_name;
+            document.getElementById('receipt-footer').innerText = settings.footer_note;
+            document.getElementById('receipt-subtotal').innerText = `₭${sale.total.toLocaleString()}`;
+            document.getElementById('receipt-given').innerText = `₭${sale.given.toLocaleString()}`;
+            document.getElementById('receipt-change').innerText = `₭${sale.change.toLocaleString()}`;
+            document.getElementById('receipt-customer').innerText = sale.customer_name;
+
+            const methodText = sale.payment_method === 'cash' ? 'ເງິນສົດ' : (sale.payment_method === 'transfer' ? 'ເງິນໂອນ QR' : 'ຕິດໜີ້');
+            document.getElementById('receipt-payment-method').innerText = methodText;
+
+            const phoneEl = document.getElementById('receipt-shop-phone');
+            if (settings.show_phone_on_receipt) {
+                phoneEl.style.display = 'block';
+                phoneEl.innerText = `ໂທ: ${settings.shop_phone}`;
+            } else {
+                phoneEl.style.display = 'none';
+            }
+
+            const cashierRow = document.getElementById('receipt-cashier-row');
+            if (settings.show_cashier_on_receipt) {
+                cashierRow.style.display = 'block';
+                document.getElementById('receipt-cashier').innerText = sale.cashier_name;
+            } else {
+                cashierRow.style.display = 'none';
+            }
+
+            const list = document.getElementById('receipt-items-list');
+            list.innerHTML = '';
+            sale.items.forEach(item => {
+                list.innerHTML += `<div class="flex justify-between"><span>${item.name} x${item.qty}</span> <span>₭${(item.price * item.qty).toLocaleString()}</span></div>`;
+            });
+            document.getElementById('receipt-modal').classList.remove('hidden');
+        }
+
+        function closeReceiptModal() { document.getElementById('receipt-modal').classList.add('hidden'); }
+        function triggerPrintReceipt() { window.print(); }
+
+        function downloadReceiptImage() {
+            const area = document.getElementById('receipt-printable-area');
+            html2canvas(area).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `${activeSaleRecord.receipt_no}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+        }
+
+        async function shareReceipt() {
+            const area = document.getElementById('receipt-printable-area');
+            const canvas = await html2canvas(area);
+            canvas.toBlob(async (blob) => {
+                const file = new File([blob], `${activeSaleRecord.receipt_no}.png`, { type: 'image/png' });
+                if (navigator.share && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        title: 'ບິນການຊຳລະເງິນ (2026)',
+                        text: `ບິນເລກທີ ${activeSaleRecord.receipt_no} - ຍອດລວມ: ₭${activeSaleRecord.total.toLocaleString()}`,
+                        files: [file]
+                    });
+                } else {
+                    alert('ອຸປະກອນຂອງທ່ານບໍ່ຮອງຮັບ Web Share! ກະລຸນາກົດໂຫລດແທນ.');
+                }
+            });
+        }
+
+        function loadDebtsUI() {
+            const tbody = document.getElementById('debt-table-body');
+            tbody.innerHTML = '';
+            if (debtCustomers.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-400 font-medium">ຍັງບໍ່ມີລູກຄ້າຕິດໜີ້[span_1](start_span)[span_1](end_span)</td></tr>`;
+                return;
+            }
+            debtCustomers.forEach((c, index) => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50/50 transition">
+                        <td class="p-3 border-b font-bold">${c.name}</td>
+                        <td class="p-3 border-b">${c.phone || '-'}</td>
+                        <td class="p-3 border-b font-black text-rose-600">₭${c.debt.toLocaleString()}</td>
+                        <td class="p-3 border-b text-center">
+                            <button onclick="payDebt(${index})" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer">ຈ່າຍໜີ້</button>
+                        </td>
+                        <td class="p-3 border-b text-center">
+                            <button onclick="viewDebtReceipt('${c.name}', ${c.debt})" class="px-2.5 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-xl text-xs font-bold transition cursor-pointer">📄 ບິນ</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function viewDebtReceipt(custName, debtAmount) {
+            // ສ້າງບິນສຳລັບຍອດໜີ້ຄົງຄ້າງຂອງລູກຄ້າຄົນນັ້ນ
+            const mockSale = {
+                receipt_no: 'DEBT-' + Math.floor(1000 + Math.random() * 9000),
+                cashier_name: currentUser ? currentUser.name : 'Admin',
+                items: [{ name: `ຍອດໜີ້ຄົງຄ້າງ (${custName})`, price: debtAmount, qty: 1 }],
+                total: debtAmount, given: 0, change: 0, payment_method: 'debt',
+                customer_name: custName, created_at: new Date().toISOString()
+            };
+            openReceiptModal(mockSale);
+        }
+
+        function payDebt(index) {
+            const cust = debtCustomers[index];
+            const amount = parseFloat(prompt(`ລູກຄ້າ: ${cust.name}\nຍອດໜີ້ຄົງຄ້າງ: ₭${cust.debt.toLocaleString()}\nປ້ອນຈຳນວນເງິນທີ່ຈ່າຍ:`));
+            if (isNaN(amount) || amount <= 0) return;
+
+            cust.debt = Math.max(0, cust.debt - amount);
+            if (cust.debt === 0) {
+                alert(`ລູກຄ້າ ${cust.name} ຊຳລະໜີ້ຄົບຖ້ວນແລ້ວ! ລະບົບໄດ້ລຶບອອກຈາກບັນຊີຕິດໜີ້ອັດຕະໂນມັດ[span_2](start_span)[span_2](end_span).`);
+                debtCustomers.splice(index, 1);
+            } else {
+                alert(`ຈ່າຍໜີ້ສຳເລັດ! ເຫຼືອຍອດໜີ້: ₭${cust.debt.toLocaleString()}`);
+            }
+            loadDebtsUI();
+        }
+
+        function loadSalesHistoryUI() {
+            const tbody = document.getElementById('history-table-body');
+            tbody.innerHTML = '';
+            if (salesHistory.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400 font-medium">ຍັງບໍ່ມີປະຫວັດການຂາຍໃນເຊສຊັ່ນນີ້</td></tr>`;
+                return;
+            }
+            salesHistory.forEach(s => {
+                const d = new Date(s.created_at);
+                const dateStr = `${d.getDate()}/${d.getMonth()+1}/2026 ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50/50 transition">
+                        <td class="p-3 border-b font-bold">${s.receipt_no}</td>
+                        <td class="p-3 border-b">${s.cashier_name}</td>
+                        <td class="p-3 border-b">${s.customer_name}</td>
+                        <td class="p-3 border-b font-black text-indigo-600">₭${s.total.toLocaleString()}</td>
+                        <td class="p-3 border-b uppercase text-xs font-bold">${s.payment_method}</td>
+                        <td class="p-3 border-b text-xs text-slate-400">${dateStr}</td>
+                        <td class="p-3 border-b text-center"><button onclick='openReceiptModal(${JSON.stringify(s)})' class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 rounded-xl text-xs font-bold transition cursor-pointer">ໂຊບິນ</button></td>
+                    </tr>
+                `;
+            });
+        }
+
+        function loadSettingsUI() {
+            document.getElementById('header-shop-name').innerText = settings.shop_name;
+        }
+    </script>
+</body>
+</html>
